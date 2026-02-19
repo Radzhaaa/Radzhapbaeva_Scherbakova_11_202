@@ -1,0 +1,21 @@
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+.idea/
+.vscode/
+*.swp
+*~
+
+__pycache__/
+*.pyc
+venv/
+.venv/
+.env
+
+*.log
+*.tmp
+tmp/
+temp/
+
+Task 1/pages/
