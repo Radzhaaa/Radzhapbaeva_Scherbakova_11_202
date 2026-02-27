@@ -1,0 +1,3 @@
+# Task 2 — tokenization and lemmatization
+nltk
+pymorphy3
