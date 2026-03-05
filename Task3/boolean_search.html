@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Булев Поиск — Инвертированный Индекс</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=IBM+Plex+Mono:wght@300;400;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --accent: #c8a96e;
+    --accent2: #6e9ec8;
+    --accent3: #c86e9e;
+    --text: #e8e4dc;
+    --muted: #6b6880;
+    --success: #6ec8a9;
+    --mono: 'IBM Plex Mono', monospace;
+    --serif: 'Playfair Display', serif;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.4;
+  }
+
+  /* Header */
+  header {
+    padding: 3rem 4rem 2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    gap: 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  header::after {
+    content: 'INDEX';
+    position: absolute;
+    right: -1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--serif);
+    font-size: 9rem;
+    font-weight: 900;
+    color: #1a1a28;
+    letter-spacing: -0.05em;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .logo-num {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--accent);
+    letter-spacing: 0.2em;
+    margin-bottom: 0.4rem;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: var(--text);
+  }
+
+  h1 span {
+    color: var(--accent);
+  }
+
+  .subtitle {
+    font-size: 0.8rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 0.5rem;
+    font-family: var(--mono);
+  }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 0;
+    min-height: calc(100vh - 130px);
+  }
+
+  /* Search panel */
+  .search-panel {
+    padding: 3rem 4rem;
+    border-right: 1px solid var(--border);
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Query input */
+  .query-wrap {
+    position: relative;
+    margin-bottom: 1.5rem;
+  }
+
+  #queryInput {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.2rem 1.5rem;
+    padding-right: 7rem;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    letter-spacing: 0.02em;
+  }
+
+  #queryInput:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(200, 169, 110, 0.08), 0 0 20px rgba(200, 169, 110, 0.05);
+  }
+
+  #queryInput::placeholder { color: var(--muted); }
+
+  #searchBtn {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--accent);
+    color: #0a0a0f;
+    border: none;
+    border-radius: 3px;
+    padding: 0.55rem 1.2rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+
+  #searchBtn:hover { background: #d9bc84; }
+  #searchBtn:active { transform: translateY(-50%) scale(0.97); }
+
+  /* Operator pills */
+  .ops {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .op-pill {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 3px;
+    padding: 0.3rem 0.8rem;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .op-pill:hover { border-color: var(--accent); color: var(--accent); }
+
+  .op-pill.and { color: #7bc8b0; border-color: #7bc8b0; opacity: 0.6; }
+  .op-pill.or  { color: var(--accent2); border-color: var(--accent2); opacity: 0.6; }
+  .op-pill.not { color: var(--accent3); border-color: var(--accent3); opacity: 0.6; }
+  .op-pill:hover { opacity: 1 !important; }
+
+  /* Example queries */
+  .examples {
+    margin-bottom: 2.5rem;
+  }
+
+  .example-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-left: 2px solid var(--border);
+    padding: 0.6rem 1rem;
+    margin-bottom: 0.4rem;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    line-height: 1.4;
+  }
+
+  .example-item:hover {
+    color: var(--text);
+    border-left-color: var(--accent);
+    background: rgba(200, 169, 110, 0.04);
+  }
+
+  /* Results */
+  .results-section { margin-top: 1rem; }
+
+  .result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+
+  .result-count {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .result-count span {
+    color: var(--success);
+    font-size: 1.4rem;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.1rem;
+  }
+
+  .result-grid {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.2rem 1.5rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    animation: slideIn 0.25s ease both;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .result-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .result-card:hover { border-color: rgba(200, 169, 110, 0.3); }
+  .result-card:hover::before { opacity: 1; }
+
+  .doc-icon {
+    width: 36px;
+    height: 36px;
+    background: rgba(200, 169, 110, 0.08);
+    border: 1px solid rgba(200, 169, 110, 0.15);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+
+  .doc-info { flex: 1; }
+
+  .doc-name {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--text);
+    margin-bottom: 0.35rem;
+    font-weight: 600;
+  }
+
+  .doc-preview {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .doc-preview mark {
+    background: rgba(200, 169, 110, 0.2);
+    color: var(--accent);
+    border-radius: 2px;
+    padding: 0 2px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+  }
+
+  .empty-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.4;
+  }
+
+  .error-msg {
+    background: rgba(200, 110, 158, 0.08);
+    border: 1px solid rgba(200, 110, 158, 0.3);
+    border-radius: 4px;
+    padding: 1rem 1.2rem;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--accent3);
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Index panel */
+  .index-panel {
+    padding: 2rem;
+    background: var(--surface);
+    overflow-y: auto;
+    max-height: calc(100vh - 130px);
+    position: sticky;
+    top: 0;
+  }
+
+  .index-search {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.6rem 0.8rem;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    outline: none;
+    margin-bottom: 1.5rem;
+    transition: border-color 0.2s;
+  }
+
+  .index-search:focus { border-color: var(--accent); }
+  .index-search::placeholder { color: var(--muted); }
+
+  .index-table {
+    width: 100%;
+  }
+
+  .index-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem;
+    align-items: start;
+    padding: 0.45rem 0;
+    border-bottom: 1px solid rgba(30, 30, 46, 0.8);
+    animation: fadeIn 0.2s ease both;
+  }
+
+  .index-term {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--accent);
+    cursor: pointer;
+    transition: color 0.1s;
+  }
+
+  .index-term:hover { color: #d9bc84; }
+
+  .index-docs {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.6;
+  }
+
+  .doc-tag {
+    display: inline-block;
+    background: rgba(110, 158, 200, 0.1);
+    border: 1px solid rgba(110, 158, 200, 0.2);
+    color: var(--accent2);
+    border-radius: 2px;
+    padding: 0 4px;
+    font-size: 0.6rem;
+    margin-left: 2px;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Parse tree viz */
+  .parse-info {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.8rem;
+    background: rgba(110, 158, 200, 0.04);
+    border-left: 2px solid rgba(110, 158, 200, 0.3);
+    line-height: 1.7;
+    border-radius: 0 3px 3px 0;
+  }
+
+  .token.kw-and { color: #7bc8b0; }
+  .token.kw-or  { color: var(--accent2); }
+  .token.kw-not { color: var(--accent3); }
+  .token.kw-paren { color: var(--muted); }
+  .token.kw-term { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo-num">// ИНФ. ПОИСК · v1.0</div>
+    <h1>Булев <span>Поиск</span></h1>
+    <p class="subtitle">Инвертированный индекс · AND · OR · NOT</p>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- Left: Search -->
+  <div class="search-panel">
+
+    <div class="section-label">Поисковый запрос</div>
+
+    <div class="query-wrap">
+      <input id="queryInput" type="text"
+        placeholder="Например: (Клеопатра AND Цезарь) OR Помпей"
+        autocomplete="off" spellcheck="false"
+      />
+      <button id="searchBtn" onclick="runSearch()">НАЙТИ</button>
+    </div>
+
+    <div class="ops">
+      <span style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);align-self:center;letter-spacing:0.1em;">ОПЕРАТОРЫ:</span>
+      <button class="op-pill and" onclick="insertOp(' AND ')">AND</button>
+      <button class="op-pill or"  onclick="insertOp(' OR ')">OR</button>
+      <button class="op-pill not" onclick="insertOp('NOT ')">NOT</button>
+      <button class="op-pill" onclick="insertOp('(')">( </button>
+      <button class="op-pill" onclick="insertOp(')')"> )</button>
+    </div>
+
+    <div class="section-label">Примеры запросов</div>
+    <div class="examples">
+      <button class="example-item" onclick="setQuery('(клеопатра AND цезарь) OR (антоний AND цицерон) OR помпей')">(клеопатра AND цезарь) OR (антоний AND цицерон) OR помпей</button>
+      <button class="example-item" onclick="setQuery('цезарь AND NOT помпей')">цезарь AND NOT помпей</button>
+      <button class="example-item" onclick="setQuery('цицерон OR клеопатра')">цицерон OR клеопатра</button>
+      <button class="example-item" onclick="setQuery('антоний AND клеопатра')">антоний AND клеопатра</button>
+      <button class="example-item" onclick="setQuery('NOT цезарь AND цицерон')">NOT цезарь AND цицерон</button>
+      <button class="example-item" onclick="setQuery('помпей AND NOT (цицерон OR клеопатра)')">помпей AND NOT (цицерон OR клеопатра)</button>
+    </div>
+
+    <div id="parseInfo" class="parse-info" style="display:none;margin-bottom:1.5rem;"></div>
+
+    <div class="results-section">
+      <div id="resultsArea">
+        <div class="empty-state">
+          <div class="empty-icon">◎</div>
+          <div>Введите запрос и нажмите НАЙТИ</div>
+          <div style="margin-top:0.5rem;opacity:0.6">Поддерживаются вложенные скобки</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Index browser -->
+  <div class="index-panel">
+    <div class="section-label" style="margin-bottom:1rem;">Инвертированный индекс</div>
+    <input class="index-search" id="indexSearch" type="text"
+      placeholder="Фильтр по термину..."
+      oninput="filterIndex()"
+    />
+    <div id="indexTable" class="index-table"></div>
+  </div>
+</div>
+
+<script>
+// ─── Инвертированный индекс (встроен) ───────────────────────────────────────
+const INDEX = {"антонием":["doc1.txt"],"антоний":["doc3.txt"],"антония":["doc2.txt","doc3.txt","doc5.txt","doc6.txt"],"бежал":["doc4.txt"],"борьбе":["doc3.txt"],"брата":["doc1.txt"],"был":["doc1.txt","doc2.txt","doc3.txt","doc4.txt","doc5.txt"],"была":["doc1.txt"],"в":["doc2.txt","doc3.txt","doc4.txt","doc5.txt"],"великий":["doc4.txt"],"великим":["doc2.txt"],"величайшим":["doc5.txt"],"величайших":["doc4.txt"],"власти":["doc6.txt"],"власть":["doc3.txt","doc4.txt"],"влюбился":["doc3.txt"],"войне":["doc2.txt","doc4.txt"],"времени":["doc1.txt"],"встретил":["doc1.txt"],"выдающимся":["doc2.txt"],"выступал":["doc2.txt"],"где":["doc4.txt"],"гибели":["doc3.txt"],"годы":["doc3.txt"],"государственным":["doc2.txt"],"гражданской":["doc2.txt","doc4.txt"],"действия":["doc2.txt"],"делами":["doc1.txt"],"деятелем":["doc2.txt"],"для":["doc6.txt"],"древнего":["doc5.txt"],"египет":["doc1.txt","doc4.txt"],"египетская":["doc6.txt"],"египетскими":["doc1.txt"],"египта":["doc1.txt","doc6.txt"],"египте":["doc3.txt"],"его":["doc3.txt","doc5.txt"],"жизни":["doc5.txt"],"за":["doc3.txt","doc4.txt"],"затем":["doc6.txt"],"защищал":["doc5.txt"],"знаменитые":["doc3.txt"],"и":["doc1.txt","doc2.txt","doc3.txt","doc5.txt","doc6.txt"],"из":["doc3.txt","doc4.txt"],"известна":["doc1.txt"],"использовала":["doc6.txt"],"катилины":["doc5.txt"],"клеопатра":["doc1.txt","doc6.txt"],"клеопатру":["doc1.txt","doc3.txt"],"когда":["doc1.txt"],"конце":["doc5.txt"],"критиковал":["doc2.txt","doc5.txt"],"лишилась":["doc6.txt"],"марк":["doc3.txt"],"марком":["doc1.txt"],"младший":["doc3.txt"],"многие":["doc3.txt"],"на":["doc6.txt"],"над":["doc4.txt"],"надежды":["doc6.txt"],"написал":["doc3.txt"],"ней":["doc3.txt"],"одним":["doc3.txt","doc4.txt"],"октавиана":["doc6.txt"],"он":["doc4.txt","doc5.txt"],"она":["doc1.txt","doc6.txt"],"оратором":["doc2.txt","doc5.txt"],"от":["doc1.txt","doc5.txt"],"отношениями":["doc1.txt"],"переписывался":["doc5.txt"],"по":["doc5.txt"],"победил":["doc2.txt"],"поддерживал":["doc4.txt","doc5.txt"],"полководцами":["doc6.txt"],"полководцев":["doc4.txt"],"полководцем":["doc2.txt"],"помпеем":["doc5.txt"],"помпей":["doc1.txt","doc3.txt","doc4.txt"],"помпея":["doc2.txt","doc4.txt"],"поражения":["doc4.txt","doc6.txt"],"посетил":["doc1.txt"],"после":["doc2.txt","doc3.txt","doc4.txt","doc6.txt"],"последней":["doc1.txt"],"приказу":["doc5.txt"],"прихода":["doc6.txt"],"провёл":["doc3.txt"],"против":["doc2.txt","doc3.txt","doc4.txt","doc5.txt"],"республику":["doc5.txt"],"рима":["doc5.txt"],"римом":["doc4.txt"],"римским":["doc2.txt"],"римскими":["doc6.txt"],"римских":["doc4.txt"],"романтическими":["doc1.txt"],"с":["doc1.txt","doc3.txt","doc4.txt","doc5.txt","doc6.txt"],"своего":["doc1.txt"],"своей":["doc6.txt"],"своими":["doc1.txt"],"связан":["doc1.txt"],"скрывалась":["doc1.txt"],"смерти":["doc2.txt"],"сначала":["doc6.txt"],"соперничал":["doc4.txt"],"соратником":["doc3.txt"],"сохранения":["doc6.txt"],"союзницей":["doc6.txt"],"союзы":["doc6.txt"],"спасение":["doc6.txt"],"стал":["doc3.txt"],"стала":["doc6.txt"],"считается":["doc5.txt"],"та":["doc1.txt"],"также":["doc1.txt","doc3.txt"],"того":["doc1.txt"],"триумвиров":["doc3.txt"],"убит":["doc4.txt","doc5.txt"],"умело":["doc6.txt"],"участвовал":["doc3.txt"],"филиппики":["doc3.txt"],"царица":["doc6.txt"],"царицей":["doc1.txt"],"цезарем":["doc1.txt","doc4.txt"],"цезарь":["doc1.txt","doc2.txt"],"цезаря":["doc2.txt","doc3.txt","doc4.txt","doc5.txt","doc6.txt"],"цицерон":["doc2.txt","doc3.txt","doc4.txt","doc5.txt"],"эллинистического":["doc1.txt"],"юлием":["doc1.txt"],"юлий":["doc2.txt"]};
+
+const ALL_DOCS = [...new Set(Object.values(INDEX).flat())].sort();
+
+// Содержимое документов (для превью)
+const DOC_CONTENT = {
+  "doc1.txt": "Клеопатра была последней царицей эллинистического Египта. Она известна своими романтическими отношениями с Юлием Цезарем и Марком Антонием. Цезарь посетил Египет и встретил Клеопатру, когда та скрывалась от своего брата. Помпей также был связан с египетскими делами того времени.",
+  "doc2.txt": "Юлий Цезарь был выдающимся римским полководцем и государственным деятелем. Цезарь победил Помпея в гражданской войне. Цицерон был великим оратором и критиковал действия Цезаря. После смерти Цезаря Цицерон выступал против Антония.",
+  "doc3.txt": "Марк Антоний был соратником Цезаря и после его гибели стал одним из триумвиров. Антоний влюбился в Клеопатру и провёл с ней многие годы в Египте. Цицерон написал знаменитые Филиппики против Антония. Помпей Младший также участвовал в борьбе за власть.",
+  "doc4.txt": "Помпей Великий был одним из величайших римских полководцев. Он соперничал с Цезарем за власть над Римом. Цицерон поддерживал Помпея в гражданской войне против Цезаря. После поражения Помпей бежал в Египет, где был убит.",
+  "doc5.txt": "Цицерон считается величайшим оратором Древнего Рима. Он защищал республику от Катилины и критиковал Антония. Цицерон переписывался с Помпеем и поддерживал его против Цезаря. В конце жизни Цицерон был убит по приказу Антония.",
+  "doc6.txt": "Египетская царица Клеопатра умело использовала союзы с римскими полководцами для сохранения своей власти. Сначала она стала союзницей Цезаря, затем Антония. После поражения Антония и прихода Октавиана Клеопатра лишилась надежды на спасение Египта."
+};
+
+// ─── Лексер ─────────────────────────────────────────────────────────────────
+function tokenize(query) {
+  const tokens = [];
+  let i = 0;
+  query = query.trim();
+  while (i < query.length) {
+    if (/\s/.test(query[i])) { i++; continue; }
+    if (query[i] === '(') { tokens.push({ type:'LPAREN', val:'(' }); i++; continue; }
+    if (query[i] === ')') { tokens.push({ type:'RPAREN', val:')' }); i++; continue; }
+    if (/[а-яёa-zА-ЯЁA-Z]/i.test(query[i])) {
+      let j = i;
+      while (j < query.length && /[а-яёa-zА-ЯЁA-Z0-9_\-]/i.test(query[j])) j++;
+      const word = query.slice(i, j);
+      const up = word.toUpperCase();
+      if (up === 'AND') tokens.push({ type:'AND', val:'AND' });
+      else if (up === 'OR') tokens.push({ type:'OR', val:'OR' });
+      else if (up === 'NOT') tokens.push({ type:'NOT', val:'NOT' });
+      else tokens.push({ type:'TERM', val: word.toLowerCase() });
+      i = j; continue;
+    }
+    throw new Error(`Неизвестный символ: "${query[i]}" (позиция ${i})`);
+  }
+  tokens.push({ type:'EOF', val:'' });
+  return tokens;
+}
+
+// ─── Парсер (рекурсивный спуск) ─────────────────────────────────────────────
+function Parser(tokens) {
+  let pos = 0;
+  const cur = () => tokens[pos];
+  const eat = (type) => {
+    if (type && cur().type !== type) throw new Error(`Ожидался ${type}, получен ${cur().type}`);
+    return tokens[pos++];
+  };
+
+  function expr() {
+    let left = term();
+    while (cur().type === 'OR') { eat('OR'); left = new Set([...left, ...term()]); }
+    return left;
+  }
+
+  function term() {
+    let left = factor();
+    while (cur().type === 'AND') { eat('AND'); const right = factor(); left = new Set([...left].filter(d => right.has(d))); }
+    return left;
+  }
+
+  function factor() {
+    if (cur().type === 'NOT') {
+      eat('NOT');
+      const operand = factor();
+      return new Set(ALL_DOCS.filter(d => !operand.has(d)));
+    }
+    if (cur().type === 'LPAREN') {
+      eat('LPAREN');
+      const r = expr();
+      eat('RPAREN');
+      return r;
+    }
+    if (cur().type === 'TERM') {
+      const t = eat('TERM').val;
+      return new Set(INDEX[t] || []);
+    }
+    throw new Error(`Неожиданный токен: ${cur().type} ("${cur().val}")`);
+  }
+
+  return { parse: () => { const r = expr(); eat('EOF'); return r; } };
+}
+
+function booleanSearch(query) {
+  const tokens = tokenize(query);
+  return Parser(tokens).parse();
+}
+
+// ─── UI helpers ──────────────────────────────────────────────────────────────
+function highlightTerms(text, terms) {
+  let result = text;
+  terms.forEach(t => {
+    if (!t || t.length < 2) return;
+    const re = new RegExp(`(${t})`, 'gi');
+    result = result.replace(re, '<mark>$1</mark>');
+  });
+  return result;
+}
+
+function extractTerms(query) {
+  try {
+    return (query.match(/[а-яёa-z]+/gi) || [])
+      .map(w => w.toLowerCase())
+      .filter(w => !['and','or','not'].includes(w));
+  } catch { return []; }
+}
+
+function renderTokens(query) {
+  try {
+    const tokens = tokenize(query).slice(0, -1); // drop EOF
+    return tokens.map(t => {
+      if (t.type === 'AND') return `<span class="token kw-and">AND</span>`;
+      if (t.type === 'OR')  return `<span class="token kw-or">OR</span>`;
+      if (t.type === 'NOT') return `<span class="token kw-not">NOT</span>`;
+      if (t.type === 'LPAREN' || t.type === 'RPAREN') return `<span class="token kw-paren">${t.val}</span>`;
+      return `<span class="token kw-term">${t.val}</span>`;
+    }).join(' ');
+  } catch { return ''; }
+}
+
+function runSearch() {
+  const query = document.getElementById('queryInput').value.trim();
+  if (!query) return;
+
+  const info = document.getElementById('parseInfo');
+  info.style.display = 'block';
+  info.innerHTML = '▸ ' + renderTokens(query);
+
+  const area = document.getElementById('resultsArea');
+
+  try {
+    const results = booleanSearch(query);
+    const terms = extractTerms(query);
+    const sorted = [...results].sort();
+
+    if (sorted.length === 0) {
+      area.innerHTML = `
+        <div class="result-header">
+          <div class="result-count"><span>0</span>документов найдено</div>
+        </div>
+        <div class="empty-state" style="padding:2rem 0">
+          <div class="empty-icon">◌</div>
+          <div>Документов по запросу не найдено</div>
+        </div>`;
+      return;
+    }
+
+    const cards = sorted.map((doc, i) => {
+      const raw = DOC_CONTENT[doc] || '';
+      const preview = highlightTerms(raw.slice(0, 140) + (raw.length > 140 ? '…' : ''), terms);
+      const docNum = doc.replace('doc','').replace('.txt','');
+      return `
+        <div class="result-card" style="animation-delay:${i * 0.06}s">
+          <div class="doc-icon">DOC<br>${docNum}</div>
+          <div class="doc-info">
+            <div class="doc-name">${doc}</div>
+            <div class="doc-preview">${preview}</div>
+          </div>
+        </div>`;
+    }).join('');
+
+    area.innerHTML = `
+      <div class="result-header">
+        <div class="result-count"><span>${sorted.length}</span>документ${sorted.length === 1 ? '' : sorted.length < 5 ? 'а' : 'ов'} найдено</div>
+      </div>
+      <div class="result-grid">${cards}</div>`;
+
+    // Highlight in index panel
+    highlightIndexTerms(extractTerms(query));
+
+  } catch (e) {
+    area.innerHTML = `<div class="error-msg">⚠ Ошибка в запросе: ${e.message}</div>`;
+  }
+}
+
+function highlightIndexTerms(terms) {
+  document.querySelectorAll('.index-term').forEach(el => {
+    el.style.color = terms.includes(el.dataset.term) ? 'var(--success)' : 'var(--accent)';
+    el.style.fontWeight = terms.includes(el.dataset.term) ? '600' : '400';
+  });
+}
+
+function insertOp(op) {
+  const inp = document.getElementById('queryInput');
+  const start = inp.selectionStart, end = inp.selectionEnd;
+  const val = inp.value;
+  inp.value = val.slice(0, start) + op + val.slice(end);
+  inp.focus();
+  inp.selectionStart = inp.selectionEnd = start + op.length;
+}
+
+function setQuery(q) {
+  document.getElementById('queryInput').value = q;
+  runSearch();
+}
+
+// ─── Index browser ───────────────────────────────────────────────────────────
+function renderIndex(filter = '') {
+  const f = filter.toLowerCase();
+  const table = document.getElementById('indexTable');
+  const entries = Object.entries(INDEX)
+    .filter(([term]) => !f || term.includes(f))
+    .sort(([a], [b]) => a.localeCompare(b, 'ru'));
+
+  if (entries.length === 0) {
+    table.innerHTML = '<div style="font-family:var(--mono);font-size:0.72rem;color:var(--muted);padding:1rem 0;text-align:center;">Не найдено</div>';
+    return;
+  }
+
+  table.innerHTML = entries.slice(0, 200).map(([term, docs]) => `
+    <div class="index-row">
+      <div class="index-term" data-term="${term}" onclick="setQuery('${term}')">${term}</div>
+      <div class="index-docs">${docs.map(d => `<span class="doc-tag">${d.replace('.txt','')}</span>`).join('')}</div>
+    </div>
+  `).join('');
+}
+
+function filterIndex() {
+  renderIndex(document.getElementById('indexSearch').value);
+}
+
+// ─── Keyboard shortcut ───────────────────────────────────────────────────────
+document.getElementById('queryInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runSearch();
+});
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+renderIndex();
+</script>
+</body>
+</html>
