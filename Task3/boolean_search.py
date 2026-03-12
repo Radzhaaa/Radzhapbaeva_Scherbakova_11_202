@@ -11,6 +11,15 @@ import os
 import re
 import sys
 
+from pymorphy3 import MorphAnalyzer
+
+morph = MorphAnalyzer()
+
+
+def lemmatize_word(word: str) -> str:
+    """Привести слово к лемме (нормальной форме)."""
+    return morph.parse(word.lower())[0].normal_form
+
 
 # ──────────────────────────────────────────────
 # Загрузка индекса
@@ -89,7 +98,7 @@ def tokenize_query(query: str) -> list[Token]:
             elif upper == 'NOT':
                 tokens.append(Token(TOKEN_NOT, 'NOT'))
             else:
-                tokens.append(Token(TOKEN_TERM, word.lower()))
+                tokens.append(Token(TOKEN_TERM, lemmatize_word(word)))
             i = j
             continue
 

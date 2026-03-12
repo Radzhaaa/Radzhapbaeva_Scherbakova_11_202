@@ -1,5 +1,6 @@
 """
 build_index.py — построение инвертированного индекса из текстовых документов.
+Индекс строится по леммам (нормальным формам слов).
 """
 
 import os
@@ -7,18 +8,22 @@ import re
 import json
 from collections import defaultdict
 
+from pymorphy3 import MorphAnalyzer
 
-def tokenize(text: str) -> list[str]:
-    """Разбить текст на токены: нижний регистр, только буквы."""
+morph = MorphAnalyzer()
+
+
+def lemmatize(text: str) -> list[str]:
+    """Разбить текст на токены и привести каждый к лемме (нормальной форме)."""
     text = text.lower()
     tokens = re.findall(r'[а-яёa-z]+', text)
-    return tokens
+    return [morph.parse(token)[0].normal_form for token in tokens]
 
 
 def build_inverted_index(docs_dir: str) -> dict[str, list[str]]:
     """
     Построить инвертированный индекс из всех .txt файлов в папке docs_dir.
-    Возвращает словарь: термин -> список документов (отсортированный).
+    Индекс строится по леммам. Возвращает словарь: лемма -> список документов (отсортированный).
     """
     index: dict[str, set] = defaultdict(set)
 
@@ -31,9 +36,9 @@ def build_inverted_index(docs_dir: str) -> dict[str, list[str]]:
         with open(filepath, encoding='utf-8') as f:
             text = f.read()
 
-        tokens = tokenize(text)
-        for token in tokens:
-            index[token].add(doc_id)
+        lemmas = lemmatize(text)
+        for lemma in lemmas:
+            index[lemma].add(doc_id)
 
     # Преобразуем set -> отсортированный list для JSON-сериализации
     return {term: sorted(doc_ids) for term, doc_ids in sorted(index.items())}
@@ -55,7 +60,7 @@ if __name__ == '__main__':
     save_index(index, OUTPUT_PATH)
 
     # Пример вывода нескольких записей
-    print("\nПример записей индекса:")
+    print("\nПример записей индекса (по леммам):")
     sample_terms = ['цезарь', 'клеопатра', 'антоний', 'помпей', 'цицерон']
     for term in sample_terms:
         if term in index:
